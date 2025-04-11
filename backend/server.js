@@ -17,7 +17,6 @@ app.use(cors({
 app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
-
 // Connect to MongoDB with improved options
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/video-tracker', {
   useNewUrlParser: true,
@@ -31,17 +30,11 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/video-track
 
 // API routes
 app.use('/api/progress', require('./routes/progressRoutes'));
-app.use('/api/videos', require('./routes/videosRoutes')); // Added videos route
+app.use('/api/videos', require('./routes/videosRoutes'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date() });
-});
-
-// Start server with improved logging
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`API available at: http://localhost:${PORT}/api`);
 });
 
 // Start server with improved logging

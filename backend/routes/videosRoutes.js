@@ -66,11 +66,24 @@ router.get('/', async (req, res) => {
     res.status(200).json(videos);
   } catch (error) {
     console.error('Error fetching videos:', error);
-    res.status(500).json({ message: 'Error fetching videos', error });
+    res.status(500).json({ message: 'Error fetching videos', error: error.message });
   }
 });
 
 // GET single video by ID
-
+router.get('/:id', async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    
+    if (!video) {
+      return res.status(404).json({ message: 'Video not found' });
+    }
+    
+    res.status(200).json(video);
+  } catch (error) {
+    console.error('Error fetching video:', error);
+    res.status(500).json({ message: 'Error fetching video', error: error.message });
+  }
+});
 
 module.exports = router;

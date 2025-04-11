@@ -4,6 +4,10 @@ const Progress = require('../model/Progress');
 
 // 🧠 Helper: Merge overlapping intervals
 function mergeIntervals(intervals) {
+  if (!Array.isArray(intervals) || intervals.some(interval => typeof interval.start !== 'number' || typeof interval.end !== 'number')) {
+    throw new Error('Invalid intervals format. Each interval must have numeric start and end properties.');
+  }
+
   if (intervals.length <= 1) return intervals;
 
   intervals.sort((a, b) => a.start - b.start);
@@ -46,7 +50,7 @@ router.get('/:userId/:videoId', async (req, res) => {
     res.status(200).json(progress);
   } catch (error) {
     console.error('GET error:', error);
-    res.status(500).json({ message: 'Error fetching progress', error });
+    res.status(500).json({ message: 'Error fetching progress', error: error.message });
   }
 });
 
@@ -91,7 +95,7 @@ router.post('/', async (req, res) => {
     });
   } catch (error) {
     console.error('POST error:', error);
-    res.status(500).json({ message: 'Error updating progress', error });
+    res.status(500).json({ message: 'Error updating progress', error: error.message });
   }
 });
 
