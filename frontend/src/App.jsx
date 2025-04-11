@@ -10,7 +10,7 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const apiUrl ='https://videotracker-1.onrender.com/api';
+  const apiUrl =  'https://videotracker-82g4.onrender.com/api';
 
   useEffect(() => {
     const fetchVideos = async () => {

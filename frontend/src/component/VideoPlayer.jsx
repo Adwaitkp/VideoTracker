@@ -20,7 +20,7 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
   const [showControls, setShowControls] = useState(false);
   
   // Get API URL from environment or use default
-  const apiUrl ='https://videotracker-1.onrender.com/api/progress';
+  const apiUrl ='https://videotracker-82g4.onrender.com/api/progress';
   
   // Queue for batching save operations
   const saveQueue = useRef([]);
