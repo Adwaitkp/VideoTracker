@@ -18,10 +18,7 @@ app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
 // Connect to MongoDB with improved options
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/video-tracker', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/video-tracker')
 .then(() => console.log('MongoDB connected successfully'))
 .catch(err => {
   console.error('MongoDB connection error:', err);
