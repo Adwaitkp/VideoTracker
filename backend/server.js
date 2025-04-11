@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 5000;
 
 // Enhanced middleware setup
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: ['https://videotracker-2.onrender.com','http://localhost:5173'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
