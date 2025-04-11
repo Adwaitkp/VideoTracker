@@ -10,7 +10,7 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const apiUrl ='https://videotracker-1.onrender.com/api';
 
   useEffect(() => {
     const fetchVideos = async () => {
