@@ -18,9 +18,10 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
   const [isSaving, setIsSaving] = useState(false);
   const [volume, setVolume] = useState(1);
   const [showControls, setShowControls] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
   
   // Get API URL from environment or use default
-  const apiUrl ='https://videotracker-82g4.onrender.com/api/progress';
+  const apiUrl = 'https://videotracker-82g4.onrender.com/api/progress';
   
   // Queue for batching save operations
   const saveQueue = useRef([]);
@@ -50,6 +51,7 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
           setProgress(data);
           if (videoRef.current && data.lastPosition) {
             videoRef.current.currentTime = data.lastPosition;
+            setCurrentTime(data.lastPosition);
             setResumedMessage(`Resumed from ${formatTime(data.lastPosition)}`);
             setTimeout(() => {
               if (isMounted) setResumedMessage('');
@@ -69,7 +71,6 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
     
     return () => {
       isMounted = false;
-      // Clear any pending timeout when unmounting
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
@@ -105,7 +106,6 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
       setTimeout(() => setError(null), 4000);
     } finally {
       setIsSaving(false);
-      // Check if new intervals were added during this process
       if (saveQueue.current.length > 0) {
         saveTimeoutRef.current = setTimeout(processSaveQueue, 1000);
       }
@@ -118,19 +118,29 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
     
     saveQueue.current.push(interval);
     
-    // Clear existing timeout to avoid multiple simultaneous saves
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     
-    // Batch save with a small delay
     saveTimeoutRef.current = setTimeout(processSaveQueue, 1000);
   }, [processSaveQueue, userId, videoId]);
+
+  // Toggle play/pause
+  const togglePlayPause = useCallback(() => {
+    if (!videoRef.current) return;
+    
+    if (isPlaying) {
+      videoRef.current.pause();
+    } else {
+      videoRef.current.play();
+    }
+  }, [isPlaying]);
 
   // Handle play event
   const handlePlay = useCallback(() => {
     setIsPlaying(true);
     const start = Math.floor(videoRef.current?.currentTime || 0);
+    setCurrentTime(start);
     setCurrentInterval({ start, end: start });
   }, []);
 
@@ -139,6 +149,7 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
     setIsPlaying(false);
     if (currentInterval) {
       const end = Math.floor(videoRef.current?.currentTime || 0);
+      setCurrentTime(end);
       if (end > currentInterval.start) {
         queueSaveProgress({ ...currentInterval, end });
       }
@@ -146,23 +157,36 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
     }
   }, [currentInterval, queueSaveProgress]);
 
-  // Fix: Handle seeking during playback properly
+  // Handle time updates during playback
   const handleTimeUpdate = useCallback(() => {
-    if (!videoRef.current || !isPlaying) return;
+    if (!videoRef.current) return;
     
     const current = Math.floor(videoRef.current.currentTime);
+    setCurrentTime(current);
+    
+    if (!isPlaying) return;
     
     if (currentInterval) {
-      // If there's a large gap between current time and end of interval,
-      // it indicates a skip/seek has occurred
       if (current > currentInterval.end + 5 || current < currentInterval.start) {
-        // Save the previous interval before starting a new one
         queueSaveProgress({ ...currentInterval, end: currentInterval.end });
-        // Start a new interval
         setCurrentInterval({ start: current, end: current });
       } else {
-        // Regular update
         setCurrentInterval(prev => ({ ...prev, end: current }));
+      }
+    }
+  }, [isPlaying, currentInterval, queueSaveProgress]);
+
+  // Handle seeking of video
+  const handleSeeked = useCallback(() => {
+    if (!videoRef.current) return;
+    
+    const current = Math.floor(videoRef.current.currentTime);
+    setCurrentTime(current);
+    
+    if (isPlaying) {
+      if (currentInterval && current !== currentInterval.end) {
+        queueSaveProgress({ ...currentInterval, end: currentInterval.end });
+        setCurrentInterval({ start: current, end: current });
       }
     }
   }, [isPlaying, currentInterval, queueSaveProgress]);
@@ -174,6 +198,7 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
       queueSaveProgress({ ...currentInterval, end: videoDuration });
       setCurrentInterval(null);
     }
+    setCurrentTime(videoDuration);
   }, [currentInterval, queueSaveProgress, videoDuration]);
 
   // Update current interval periodically when playing
@@ -182,8 +207,8 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
     if (isPlaying && currentInterval && videoRef.current) {
       timer = setInterval(() => {
         const current = Math.floor(videoRef.current.currentTime);
+        setCurrentTime(current);
         
-        // Only update if current time has changed significantly
         if (Math.abs(current - currentInterval.end) > 1) {
           setCurrentInterval(prev => {
             return { ...prev, end: current };
@@ -207,33 +232,35 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
   // Quick skip functions
   const skipBackward = useCallback(() => {
     if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+      const newTime = Math.max(0, videoRef.current.currentTime - 10);
+      videoRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
     }
   }, []);
 
   const skipForward = useCallback(() => {
     if (videoRef.current) {
-      videoRef.current.currentTime = Math.min(videoDuration, videoRef.current.currentTime + 10);
+      const newTime = Math.min(videoDuration, videoRef.current.currentTime + 10);
+      videoRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
     }
   }, [videoDuration]);
 
-  // New: Handle click on progress track to seek
+  // Handle click on progress track to seek
   const handleTrackClick = useCallback((e) => {
     if (!progressBarRef.current || !videoRef.current) return;
-    
+
     const rect = progressBarRef.current.getBoundingClientRect();
     const clickPosition = (e.clientX - rect.left) / rect.width;
     const seekTime = videoDuration * clickPosition;
     
-    // Pause existing interval if playing
     if (isPlaying && currentInterval) {
       queueSaveProgress({ ...currentInterval, end: Math.floor(videoRef.current.currentTime) });
     }
     
-    // Set new video position
     videoRef.current.currentTime = seekTime;
+    setCurrentTime(seekTime);
     
-    // Start a new interval if playing
     if (isPlaying) {
       setCurrentInterval({ start: Math.floor(seekTime), end: Math.floor(seekTime) });
     }
@@ -247,15 +274,13 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
     const clickPosition = (e.clientX - rect.left) / rect.width;
     const seekTime = videoDuration * clickPosition;
     
-    // Pause existing interval if playing
     if (isPlaying && currentInterval) {
       queueSaveProgress({ ...currentInterval, end: Math.floor(videoRef.current.currentTime) });
     }
     
-    // Set new video position
     videoRef.current.currentTime = seekTime;
+    setCurrentTime(seekTime);
     
-    // Start a new interval if playing
     if (isPlaying) {
       setCurrentInterval({ start: Math.floor(seekTime), end: Math.floor(seekTime) });
     }
@@ -300,55 +325,126 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
         onMouseEnter={() => setShowControls(true)}
         onMouseLeave={() => setShowControls(false)}
       >
+        {/* Video element with controls removed */}
         <video
           ref={videoRef}
-          className="w-full bg-black"
-          controls
+          className="w-full bg-black cursor-pointer"
+          onClick={togglePlayPause}
           onPlay={handlePlay}
           onPause={handlePause}
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleEnded}
+          onSeeked={handleSeeked}
         >
           <source src={videoUrl} type="video/mp4" />
           Your browser does not support HTML5 video.
         </video>
         
-        {showControls && (
-          <div className="absolute bottom-16 left-0 right-0 flex justify-center space-x-4 p-2 bg-black bg-opacity-60 text-white transition-opacity duration-300">
-            <button 
-              onClick={skipBackward}
-              className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded-full focus:outline-none flex items-center"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path>
+        {/* Play/pause button overlay */}
+        <div 
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ pointerEvents: 'none' }}
+        >
+          {!isPlaying && (
+            <div className="bg-black bg-opacity-40 rounded-full p-4">
+              <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" fillRule="evenodd"></path>
               </svg>
-              10s
-            </button>
-            <button 
-              onClick={skipForward}
-              className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded-full focus:outline-none flex items-center"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
-              </svg>
-              10s
-            </button>
-            <div className="flex items-center space-x-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 010-7.072m12.728 0l-3.536 3.536M6.414 8.464l3.536 3.536"></path>
-              </svg>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={volume}
-                onChange={handleVolumeChange}
-                className="w-20 accent-blue-500"
-              />
+            </div>
+          )}
+        </div>
+        
+        {/* Custom video controls */}
+        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent px-4 py-3 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
+          {/* Progress bar */}
+          <div 
+            ref={progressBarRef}
+            className="w-full bg-gray-500 bg-opacity-50 h-2 rounded-full overflow-hidden cursor-pointer hover:h-3 transition-all duration-200 mb-3"
+            onClick={handleTrackClick}
+          >
+            <div
+              className="bg-blue-600 h-full transition-all duration-300"
+              style={{ width: `${(currentTime / videoDuration) * 100}%` }}
+            ></div>
+          </div>
+          
+          {/* Controls row */}
+          <div className="flex items-center justify-between text-white">
+            <div className="flex items-center space-x-4">
+              <button 
+                onClick={skipBackward}
+                className="p-1 hover:bg-gray-700 hover:bg-opacity-50 rounded-full focus:outline-none"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l-4-4m0 0l4-4m-4 4h8"></path>
+                </svg>
+              </button>
+              
+              <button 
+                onClick={togglePlayPause}
+                className="p-2 hover:bg-gray-700 hover:bg-opacity-50 rounded-full focus:outline-none"
+              >
+                {isPlaying ? (
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                )}
+              </button>
+              
+              <button 
+                onClick={skipForward}
+                className="p-1 hover:bg-gray-700 hover:bg-opacity-50 rounded-full focus:outline-none"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10l4 4m0 0l-4 4m4-4H4"></path>
+                </svg>
+              </button>
+              
+              <div className="flex items-center space-x-2">
+                <span className="text-sm">{formatTime(currentTime)}</span>
+                <span className="text-xs text-gray-300">/</span>
+                <span className="text-sm">{formatTime(videoDuration)}</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <button className="p-1 hover:bg-gray-700 hover:bg-opacity-50 rounded-full focus:outline-none">
+                  {volume === 0 ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd"></path>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path>
+                    </svg>
+                  ) : volume < 0.5 ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd"></path>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M15.536 8.464a5 5 0 010 7.072"></path>
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd"></path>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M17.07 8.93a10 10 0 010 6.14M15.54 7.46a7 7 0 010 9.08"></path>
+                    </svg>
+                  )}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={volume}
+                  onChange={handleVolumeChange}
+                  className="w-20 accent-blue-500"
+                />
+              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       <div className="p-6 space-y-4">
@@ -363,23 +459,6 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
             </button>
           </div>
         )}
-
-        <div>
-          <div className="flex justify-between text-sm text-gray-600 mb-1">
-            <span className="font-medium">{progress.percentageWatched.toFixed(1)}% watched</span>
-            <span>{formatTime(progress.lastPosition)} / {formatTime(videoDuration)}</span>
-          </div>
-          <div 
-            ref={progressBarRef}
-            className="w-full bg-gray-200 h-3 rounded-full overflow-hidden cursor-pointer hover:bg-gray-300 transition-colors duration-200"
-            onClick={handleTrackClick}
-          >
-            <div
-              className="bg-blue-600 h-full transition-all duration-300"
-              style={{ width: `${progress.percentageWatched}%` }}
-            ></div>
-          </div>
-        </div>
 
         <div className="space-y-1">
           <div className="text-xs text-gray-500 flex justify-between">
@@ -417,6 +496,11 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
                 }}
               />
             )}
+          </div>
+          {/* Percentage display below the segments bar */}
+          <div className="flex justify-between text-sm text-gray-600 mt-2">
+            <span className="font-medium">{progress.percentageWatched.toFixed(1)}% watched</span>
+            <span>{formatTime(currentTime)} / {formatTime(videoDuration)}</span>
           </div>
         </div>
       </div>
