@@ -230,21 +230,48 @@ const VideoPlayer = ({ videoId, userId, videoUrl, videoDuration, videoTitle }) =
   }, []);
 
   // Quick skip functions
-  const skipBackward = useCallback(() => {
-    if (videoRef.current) {
-      const newTime = Math.max(0, videoRef.current.currentTime - 10);
-      videoRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
+// Modified skipBackward and skipForward functions
+const skipBackward = useCallback(() => {
+  if (videoRef.current) {
+    const newTime = Math.max(0, videoRef.current.currentTime - 10);
+    
+    // If we're currently playing, we should update the current interval instead of creating a new one
+    if (isPlaying && currentInterval) {
+      // Only save the current interval if there's a significant time jump
+      if (Math.abs(newTime - currentInterval.end) > 10) {
+        queueSaveProgress({ ...currentInterval, end: Math.floor(videoRef.current.currentTime) });
+        setCurrentInterval({ start: Math.floor(newTime), end: Math.floor(newTime) });
+      } else {
+        // Otherwise just update the end time of current interval without saving
+        setCurrentInterval(prev => ({ ...prev, end: Math.floor(newTime) }));
+      }
     }
-  }, []);
+    
+    videoRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  }
+}, [isPlaying, currentInterval, queueSaveProgress]);
 
-  const skipForward = useCallback(() => {
-    if (videoRef.current) {
-      const newTime = Math.min(videoDuration, videoRef.current.currentTime + 10);
-      videoRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
+const skipForward = useCallback(() => {
+  if (videoRef.current) {
+    const newTime = Math.min(videoDuration, videoRef.current.currentTime + 10);
+    
+    // If we're currently playing, we should update the current interval instead of creating a new one
+    if (isPlaying && currentInterval) {
+      // Only save the current interval if there's a significant time jump
+      if (Math.abs(newTime - currentInterval.end) > 10) {
+        queueSaveProgress({ ...currentInterval, end: Math.floor(videoRef.current.currentTime) });
+        setCurrentInterval({ start: Math.floor(newTime), end: Math.floor(newTime) });
+      } else {
+        // Otherwise just update the end time of current interval without saving
+        setCurrentInterval(prev => ({ ...prev, end: Math.floor(newTime) }));
+      }
     }
-  }, [videoDuration]);
+    
+    videoRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  }
+}, [videoDuration, isPlaying, currentInterval, queueSaveProgress]);
 
   // Handle click on progress track to seek
   const handleTrackClick = useCallback((e) => {
